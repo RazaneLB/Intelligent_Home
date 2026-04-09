@@ -1,0 +1,196 @@
+#include <LiquidCrystal_I2C.h>
+#include <Keypad.h>
+#include <Password.h>
+#include <Servo.h>
+
+#define buzzer 12  // Pin pour le buzzer
+
+LiquidCrystal_I2C lcd(0x3F, 16, 2); // Initialisation du LCD avec adresse I2C
+
+String newPasswordString; // Variable pour le nouveau mot de passe
+char newPassword[6];      // Tableau pour le mot de passe
+byte a = 5;
+bool value = true;
+
+Password password = Password("1234"); // Mot de passe initial (par défaut)
+
+byte maxPasswordLength = 6;
+byte currentPasswordLength = 0;
+const byte ROWS = 4; // Nombre de lignes du clavier
+const byte COLS = 4; // Nombre de colonnes du clavier
+
+// Disposition du clavier 4x4
+char keys[ROWS][COLS] = {
+  {'D', 'C', 'B', 'A'},
+  {'#', '9', '6', '3'},
+  {'0', '8', '5', '2'},
+  {'*', '7', '4', '1'},
+};
+
+// Broches du clavier
+byte rowPins[ROWS] = {2, 3, 4, 5};
+byte colPins[COLS] = {6, 7, 8, 9};
+
+// Initialisation du clavier
+Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+
+// Pin pour le capteur de gaz
+const int gasSensorPin = A0; // Broche analogique pour le capteur de gaz
+const int threshold = 800;   // Seuil de détection du gaz
+int gasLevel = 0;           // Variable pour stocker le niveau de gaz
+
+// Initialisation du servo moteur
+Servo myservo;
+int servoPin = 10;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(buzzer, OUTPUT); // Pin pour le buzzer
+  lcd.init();              // Initialisation du LCD
+  lcd.backlight();         // Allumer l'éclairage du LCD
+  lcd.setCursor(3, 0);
+  lcd.print("WELCOME TO");
+  lcd.setCursor(0, 1);
+  lcd.print("DOOR LOCK SYSTEM");
+  delay(3000);  // Affichage du message de bienvenue pendant 3 secondes
+  lcd.clear();
+
+  myservo.attach(servoPin); // Attacher le servo moteur à la broche 10
+}
+
+void loop() {
+  lcd.setCursor(1, 0);
+  lcd.print("ENTER PASSWORD");
+
+  char key = keypad.getKey();  // Lecture de la touche du clavier
+  if (key != NO_KEY) {
+    delay(60);
+    if (key == 'C') {
+      resetPassword();  // Réinitialisation du mot de passe
+    } else if (key == 'D') {
+      if (value == true) {
+        doorlocked();  // Verrouiller la porte
+        value = false;
+      } else if (value == false) {
+        dooropen();    // Ouvrir la porte
+        value = true;
+      }
+    } else {
+      processNumberKey(key);  // Traiter la touche appuyée
+    }
+  }
+
+  // Lecture du capteur de gaz
+  gasLevel = analogRead(gasSensorPin);  // Lecture du niveau de gaz
+
+  // Si le niveau de gaz dépasse le seuil
+  if (gasLevel > threshold) {
+    digitalWrite(buzzer, HIGH);  // Activer le buzzer
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("GAS ALERT!");
+    delay(1000);  // Maintenir l'alerte pendant 1 seconde
+    digitalWrite(buzzer, LOW);   // Désactiver le buzzer
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("ENTER PASSWORD");
+  }
+}
+
+void processNumberKey(char key) {
+  lcd.setCursor(a, 1);
+  lcd.print("*");
+  a++;
+  if (a == 11) {
+    a = 5;
+  }
+  currentPasswordLength++;
+  password.append(key);
+
+  if (currentPasswordLength == maxPasswordLength) {
+    doorlocked();
+    dooropen();
+  }
+}
+
+void dooropen() {
+  if (password.evaluate()) {
+    digitalWrite(buzzer, HIGH);  // Si le mot de passe est correct, activer le buzzer
+    delay(300);
+    digitalWrite(buzzer, LOW);
+    lcd.setCursor(0, 0);
+    lcd.print("CORRECT PASSWORD");
+    lcd.setCursor(0, 1);
+    lcd.print("OPEN THE DOOR...");
+    delay(2000);  // Maintenir l'affichage pendant 2 secondes
+    myservo.write(180);  // Ouvrir la porte (angle 90 degrés)
+    delay(2000);  // Maintenir la porte ouverte pendant 2 secondes
+    myservo.write(0);  // Fermer la porte (angle 0 degrés)
+    lcd.clear();
+    a = 5;
+  } else {
+    digitalWrite(buzzer, HIGH);  // Si le mot de passe est incorrect, alerter avec le buzzer
+    delay(200);
+    digitalWrite(buzzer, LOW);
+    delay(200);
+    digitalWrite(buzzer, HIGH);
+    delay(200);
+    digitalWrite(buzzer, LOW);
+    delay(200);
+    digitalWrite(buzzer, HIGH);
+    delay(200);
+    digitalWrite(buzzer, LOW);
+    delay(200);
+    lcd.setCursor(0, 0);
+    lcd.print("WRONG PASSWORD!");
+    lcd.setCursor(0, 1);
+    lcd.print("PLEASE TRY AGAIN");
+    delay(2000);
+    lcd.clear();
+    a = 5;
+  }
+  resetPassword();
+}
+
+void resetPassword() {
+  password.reset();  // Réinitialiser le mot de passe
+  currentPasswordLength = 0;
+  lcd.clear();
+  a = 5;
+}
+
+void doorlocked() {
+  if (password.evaluate()) {
+    digitalWrite(buzzer, HIGH);  // Si le mot de passe est correct, activer le buzzer
+    delay(300);
+    digitalWrite(buzzer, LOW);
+    lcd.setCursor(0, 0);
+    lcd.print("CORRECT PASSWORD");
+    lcd.setCursor(2, 1);
+    lcd.print("DOOR LOCKED");
+    delay(2000);  // Maintenir l'affichage pendant 2 secondes
+    lcd.clear();
+    a = 5;
+  } else {
+    digitalWrite(buzzer, HIGH);  // Si le mot de passe est incorrect, alerter avec le buzzer
+    delay(200);
+    digitalWrite(buzzer, LOW);
+    delay(200);
+    digitalWrite(buzzer, HIGH);
+    delay(200);
+    digitalWrite(buzzer, LOW);
+    delay(200);
+    digitalWrite(buzzer, HIGH);
+    delay(200);
+    digitalWrite(buzzer, LOW);
+    delay(200);
+    lcd.setCursor(0, 0);
+    lcd.print("WRONG PASSWORD!");
+    lcd.setCursor(0, 1);
+    lcd.print("PLEASE TRY AGAIN");
+    delay(2000);
+    lcd.clear();
+    a = 5;
+  }
+  resetPassword();
+}
